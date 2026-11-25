@@ -2,7 +2,9 @@
 
 隐私守护是一款 Android 手机应用。你可以过滤广告请求、自动点击开屏广告的「跳过」、保留验证码并移除促销通知，也可以限制数字助理读取当前界面，查看谁正在通过标准接口共享屏幕。最低支持 Android 8（API 26），包名为 `app.local.privacyguard`。
 
-**1.2 下载**　[Android 安装包](https://github.com/Ar1haraNaN7mI/trulysafeguard/releases/download/v1.2/TrulySafeGuard-1.2.apk) · [可选的电脑激活工具](https://github.com/Ar1haraNaN7mI/trulysafeguard/releases/download/v1.2/TrulySafeGuard-1.2-helper.zip) · [完整使用手册](docs/usage.zh-CN.md)
+**1.2.1 下载**　[Android 安装包](https://github.com/Ar1haraNaN7mI/trulysafeguard/releases/download/v1.2.1/TrulySafeGuard-1.2.1.apk) · [可选的电脑激活工具](https://github.com/Ar1haraNaN7mI/trulysafeguard/releases/download/v1.2.1/TrulySafeGuard-1.2.1-helper.zip) · [完整使用手册](docs/usage.zh-CN.md)
+
+1.2.1 修复了华为侧边手势热区造成的跳过控件遮挡误判。热区只覆盖按钮边缘、控件中心仍可操作时，守护现在可以继续。这个问题在 CET-AL00 的原生测试广告中复现。普通控件点击与携程专用轻触共用这项遮挡检查。
 
 ## 开始使用
 
@@ -43,7 +45,7 @@
 
 在同一台手机上，使用系统 DNS 查询新增广告主机下的随机子域，守护的拦截计数增加 1，查询没有得到地址，正常域名 `example.org` 仍能解析。从守护界面关闭数字助理的截图和界面结构请求后，两项系统设置均回读为 `0`，恢复后两项都回到原有的系统默认，再次关闭也成功。
 
-在 CET-AL00 和模拟器上分别使用可计数的测试应用验证自动点击。测试广告从后台回到前台后，跳过控件收到了点击。切回带普通「跳过」按钮的对照表单后，点击次数维持原值。
+1.2 在 CET-AL00 最后一轮原生测试广告中漏掉了跳过按钮，广告控件和普通表单的「跳过」均收到 0 次点击。1.2.1 在模拟器上重现了遮挡。系统窗口只压住控件边缘时，合成广告控件收到 1 次轻触，遮住中心时收到 0 次。1.2.1 已安装到 CET-AL00，该版本在手机上的同项复测尚未完成。
 
 模拟器另用独立测试包和签名验证两条专用规则。模拟携程布局且倒计时递减时，控件收到 1 次轻触。倒计时静止、倒计时逆序或文案改为「支付」时均为 0 次。模拟小红书广告页面的「跳过」被点击 1 次，普通表单页面的相同文案为 0 次。上述结果来自可计数的合成界面。
 

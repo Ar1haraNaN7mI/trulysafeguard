@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
+import android.graphics.Region;
 import android.os.Build;
 import android.view.Display;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -86,10 +87,19 @@ final class SplashTouch {
             Rect surface = new Rect();
             active.getBoundsInScreen(surface);
             if (!surface.contains(button)) return false;
+            int x = button.centerX(), y = button.centerY();
+            Region region = new Region();
             for (AccessibilityWindowInfo w : windows) {
                 if (w == active || w.getLayer() < active.getLayer()) continue;
-                w.getBoundsInScreen(surface);
-                if (Rect.intersects(surface, button)) return false;
+                // OEM back-gesture strips can cover a few pixels of a button's outer
+                // edge. Check the actual action point against each higher window.
+                if (Build.VERSION.SDK_INT >= 30) {
+                    w.getRegionInScreen(region);
+                    if (region.contains(x, y)) return false;
+                } else {
+                    w.getBoundsInScreen(surface);
+                    if (surface.contains(x, y)) return false;
+                }
             }
             return true;
         } finally {
