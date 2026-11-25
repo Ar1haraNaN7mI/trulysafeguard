@@ -1,0 +1,13 @@
+<resources>
+    <style name="GuardTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F3F6F3</item>
+        <item name="android:colorAccent">#006959</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#E9F2EC</item>
+        <item name="android:navigationBarColor">#F3F6F3</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

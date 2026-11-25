@@ -1,0 +1,9 @@
+.signing/
+*.p12
+*.pfx
+*.jks
+*.keystore
+/build/
+__pycache__/
+*.py[cod]
+local.properties
