@@ -8,29 +8,34 @@ import android.os.*;
 import android.provider.Settings;
 import android.widget.*;
 
-/** Controls and live status for the ordinary application's independent monitor. */
+/** Managed capture policy and the separate read-only standard-session monitor. */
 public final class ScreenWatchActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS=61;
     private TextView status,access,unplugged;
     private Switch enabled,hints;
+    private GlobalScreenPolicy policy;
     private Button detail;
     private boolean repaint;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable refreshLoop=new Runnable(){public void run(){refresh();handler.postDelayed(this,1500);}};
 
     @Override protected void onCreate(Bundle state){
-        super.onCreate(state);setTitle("手机投屏监测");
+        super.onCreate(state);setTitle("全局屏幕数据防护");
         GuardUi ui=new GuardUi(this);
         ScrollView scroll=new ScrollView(this);
         LinearLayout page=ui.col();ui.pad(page,20,20);page.setBackgroundColor(GuardUi.BG);
         scroll.addView(page);setContentView(scroll);
         ui.add(page,ui.action("返回",v->finish()),0);
-        ui.add(page,ui.text("手机投屏监测",26,GuardUi.INK,true),2);
+        ui.add(page,ui.text("全局屏幕数据防护",26,GuardUi.INK,true),2);
+        policy=new GlobalScreenPolicy(this,ui,page);
+        ui.add(page,ui.action("阻止数字助理读取屏幕",v->
+                startActivity(new Intent(this,AssistPrivacyActivity.class))),6);
+        ui.add(page,ui.text("标准屏幕共享监测",21,GuardUi.INK,true),20);
         enabled=new Switch(this);enabled.setText("在手机上持续监测");enabled.setMinHeight(ui.dp(54));ui.add(page,enabled,6);
         status=ui.text("",16,GuardUi.TEAL,true);ui.add(page,status,3);
         access=ui.text("",14,GuardUi.MUTED,false);ui.add(page,access,8);
         unplugged=ui.text("",14,GuardUi.TEAL,false);ui.add(page,unplugged,4);
-        ui.add(page,ui.text("监测在本应用进程运行，保留你的按键截图。发现标准共享会话时会提醒；在系统录屏通知里结束共享，或打开来源应用的系统详情。系统内部取屏和无障碍读屏可能没有标准会话。",15,GuardUi.INK,false),12);
+        ui.add(page,ui.text("监测所有来源的标准共享会话，包括使用此接口的系统组件。发现后会提醒。采样间隔约 3 秒，首次画面可能已经传出。可在系统录屏通知中结束共享。",15,GuardUi.INK,false),12);
         detail=ui.action("打开来源应用的系统详情",v->{
             String pkg=ScreenWatchService.source;
             if(!pkg.isEmpty())settings(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.fromParts("package",pkg,null)));
@@ -38,7 +43,7 @@ public final class ScreenWatchActivity extends Activity {
         hints=new Switch(this);hints.setText("允许所选应用的前台服务提示");hints.setMinHeight(ui.dp(52));ui.add(page,hints,16);
         ui.add(page,ui.text("系统会话读不到时，可利用已连接的通知过滤服务，仅检查已选应用的新前台通知标志及其服务声明。音乐播放等服务也可能触发提示；多长时间未收到提示都不能排除录屏。",14,GuardUi.MUTED,false),2);
         ui.add(page,ui.action("选择需要提示的应用",v->startActivity(new Intent(this,UsbPolicyActivity.class))),4);
-        ui.add(page,ui.text("在应用规则中勾选屏幕共享项。本页的提示不会强制停止应用；设备规则执行器在线时，已保存的停止规则仍可独立生效。",14,GuardUi.MUTED,false),0);
+        ui.add(page,ui.text("在应用规则中勾选屏幕共享项可启用该应用的辅助提示。上方标准会话监测覆盖系统报告的所有来源，无需建立应用列表。",14,GuardUi.MUTED,false),0);
         ui.add(page,ui.action("守护通知设置",v->settings(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 .putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()))),8);
         hints.setOnCheckedChangeListener((v,on)->{if(!repaint)Prefs.set(this,ScreenWatchService.HINTS,on);});
@@ -96,6 +101,6 @@ public final class ScreenWatchActivity extends Activity {
         }
         detail.setEnabled(running&&!ScreenWatchService.source.isEmpty());
     }
-    @Override protected void onResume(){super.onResume();refreshLoop.run();}
+    @Override protected void onResume(){super.onResume();policy.refresh();refreshLoop.run();}
     @Override protected void onPause(){handler.removeCallbacks(refreshLoop);super.onPause();}
 }

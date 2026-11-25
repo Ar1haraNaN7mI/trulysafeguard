@@ -2,7 +2,6 @@ package app.local.privacyguard;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.admin.DevicePolicyManager;
 import android.app.role.RoleManager;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
@@ -27,7 +26,7 @@ public final class MainActivity extends Activity {
     private GuardUi u;
     private LinearLayout panel;
     private TextView summary;
-    private Card links,dns,notices,screen,managed;
+    private Card links,dns,notices,screen;
     private boolean repaint;
     private final Handler handler=new Handler(android.os.Looper.getMainLooper());
     private final Runnable tick=new Runnable(){public void run(){refresh();handler.postDelayed(this,1800);}};
@@ -41,9 +40,12 @@ public final class MainActivity extends Activity {
         LinearLayout head=u.col();u.pad(head,18,18);head.setBackground(u.shape(0xFFE3EFE6,18,0));u.add(panel,head,0);
         head.addView(u.text("隐私守护",30,GuardUi.INK,true));
         summary=u.text("",15,GuardUi.MUTED,false);u.add(head,summary,4);
-        u.add(head,u.action("系统级按应用控制",v->startActivity(new Intent(this,UsbPolicyActivity.class))),6);
+        u.add(head,u.action("全局屏幕数据防护",v->startActivity(new Intent(this,ScreenWatchActivity.class))),6);
+        u.add(head,u.action("系统级按应用控制",v->startActivity(new Intent(this,UsbPolicyActivity.class))),0);
         u.add(head,u.action("安装来源与新增应用",v->startActivity(new Intent(this,InstallGuardActivity.class))),0);
-        u.add(head,u.action("独立投屏监测",v->startActivity(new Intent(this,ScreenWatchActivity.class))),0);
+        dns=card("全应用广告请求拦截","开启后，当前用户通过系统 DNS 解析广告投放域名的应用都会受到过滤，冷启动和从后台切回都适用。已缓存的素材、应用自行解析的域名及业务同域广告可能继续显示。",this::toggleDns);
+        button(dns,"编辑拦截域名",v->domainEditor());
+        button(dns,"自动跳过已显示的开屏广告",v->startActivity(new Intent(this,SplashGuardActivity.class)));
         links=card("网页跳转确认","作为默认浏览器接收 HTTP / HTTPS 链接。广告域名直接拦截，其他外部网页由你决定是否打开。应用内网页和直接唤起另一个应用的跳转可能绕过。",on->{
             Prefs.set(this,Prefs.LINKS,on);if(on&&!isBrowser())browserSettings();});
         button(links,"选择默认浏览器",v->browserSettings());
@@ -57,8 +59,6 @@ public final class MainActivity extends Activity {
         if("HUAWEI".equalsIgnoreCase(Build.MANUFACTURER)){
             button(links,"华为设备方向权限",v->startActivity(new Intent(this,MotionGuardActivity.class)));
         }
-        dns=card("广告域名拦截","通过本地 VPN 过滤系统 DNS 查询，与网页跳转共用域名规则。此功能需要独占 VPN；应用自带加密 DNS、直连 IP 或同域广告可能绕过。",this::toggleDns);
-        button(dns,"编辑拦截域名",v->domainEditor());
         notices=card("广告通知过滤","只处理你选中的应用。通知正常发布后按规则移除；横幅、声音可能先出现。",on->{
             Prefs.set(this,Prefs.NOTICES,on);AdNotificationService.applyEnabled(this);
             if(on&&!AdNotificationService.hasAccess(this))notificationSettings();
@@ -66,16 +66,8 @@ public final class MainActivity extends Activity {
         });
         button(notices,"选择应用与过滤规则",v->startActivity(new Intent(this,NotificationRulesActivity.class)));
         button(notices,"管理系统通知访问",v->notificationSettings());
-        screen=card("守护窗口防截屏","可选。启用后也会限制你对本应用的截图。按应用监视屏幕共享请用“系统级按应用控制”。",on->{Prefs.set(this,Prefs.SECURE,on);GuardApp.protect(this);});
+        screen=card("守护窗口防截屏","保护守护自己的面板和私密预览；启用后也会限制你对这些窗口的截图。跨应用保护范围可在“全局屏幕数据防护”中查看。",on->{Prefs.set(this,Prefs.SECURE,on);GuardApp.protect(this);});
         button(screen,"打开私密文件预览",v->startActivity(new Intent(this,SecureViewerActivity.class)));
-        DevicePolicyManager dpm=getSystemService(DevicePolicyManager.class);
-        if(dpm!=null&&(dpm.isDeviceOwnerApp(getPackageName())||dpm.isProfileOwnerApp(getPackageName()))){
-            boolean whole=dpm.isDeviceOwnerApp(getPackageName());
-            managed=card(whole?"受管设备防截屏":"工作资料防截屏",whole?"由本应用的设备所有者策略限制截屏。":"由本应用的资料所有者策略限制工作资料中的截屏。",on->{
-                try{dpm.setScreenCaptureDisabled(new ComponentName(this,PolicyReceiver.class),on);}
-                catch(SecurityException|IllegalStateException e){info("策略未更改","当前系统没有授予更改此策略的权限。");}
-            });
-        }
         Button joystick=u.action("打开定位摇杆网页",v->startActivity(new Intent(this,LocationActivity.class)));
         u.add(panel,joystick,10);
         Button privacy=u.action("打开系统隐私设置",v->systemSettings(Settings.ACTION_PRIVACY_SETTINGS));
@@ -106,12 +98,10 @@ public final class MainActivity extends Activity {
             int rules=NotificationRulesActivity.ruleCount(this);
             show(links,l,l?(browser?"正在保护外部网页链接":"可在打开方式中选择，尚未设为默认"):"已关闭");
             String error=AdDnsService.lastError(this);
-            show(dns,d,running?"已连接本地 DNS 过滤":(error!=null&&!error.isEmpty()?error:(d?"正在建立连接":"已关闭")));
+            show(dns,d,running?"本地 DNS 过滤已连接 · 本轮已拒绝 "+AdDnsService.blockedCount()+" 次查询":(error!=null&&!error.isEmpty()?error:(d?"正在建立连接":"已关闭")));
             show(notices,n,!n?"已关闭":(!access?"等待系统授予通知访问":(rules==0?"尚未选择要过滤的应用":(connected?"监听已连接 · 已选 "+rules+" 个应用":"等待系统连接监听服务"))));
             show(screen,s,s?"本应用窗口已保护":"已关闭");
-            int count=(l&&browser?1:0)+(running?1:0)+(n&&access&&connected&&rules>0?1:0)+(s?1:0);
-            if(managed!=null){DevicePolicyManager dp=getSystemService(DevicePolicyManager.class);boolean en=dp.getScreenCaptureDisabled(new ComponentName(this,PolicyReceiver.class));show(managed,en,en?"策略已生效":"策略已关闭");if(en)count++;}
-            summary.setText(count==0?"当前没有生效的保护":"当前生效的保护 · "+count+" 项");
+            summary.setText(running?"全应用广告请求过滤已连接":"全应用广告请求过滤尚未连接");
         } finally {repaint=false;}
     }
     private void browserSettings(){
@@ -170,6 +160,11 @@ public final class MainActivity extends Activity {
         }));dialog.show();
     }
     private void info(String title,String msg){new GuardDialog(this).setTitle(title).setMessage(msg).setPositiveButton("知道了",null).show();}
-    @Override protected void onResume(){super.onResume();handler.removeCallbacks(tick);tick.run();}
+    @Override protected void onResume(){
+        super.onResume();
+        if(Prefs.get(this,ScreenWatchService.ENABLED) && !ScreenWatchService.running()
+                && ScreenWatchService.notificationsAllowed(this))ScreenWatchService.start(this);
+        handler.removeCallbacks(tick);tick.run();
+    }
     @Override protected void onPause(){handler.removeCallbacks(tick);super.onPause();}
 }

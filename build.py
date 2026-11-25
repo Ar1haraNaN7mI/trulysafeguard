@@ -18,6 +18,7 @@ def main():
     args=argparse.ArgumentParser(description=__doc__)
     args.add_argument('--out',type=Path,default=ROOT/'build/PrivacyGuard.apk')
     args.add_argument('--sdk',type=Path)
+    args.add_argument('--signing-dir',type=Path,help='Use an existing private signing directory for an update')
     opts=args.parse_args()
     env=dict(os.environ)
     home=Path.home()
@@ -43,8 +44,11 @@ def main():
         return tools/(name+('.bat' if WIN and name in ('d8','apksigner') else '.exe' if WIN else ''))
     def run(*cmd):subprocess.run([str(x) for x in cmd],check=True,env=env)
     build=ROOT/'build';build.mkdir(exist_ok=True)
-    signing=ROOT/'.signing';signing.mkdir(exist_ok=True)
+    signing=opts.signing_dir.resolve() if opts.signing_dir else ROOT/'.signing'
+    if not opts.signing_dir:signing.mkdir(exist_ok=True)
     key=signing/'guard.p12';secret=signing/'key-password'
+    if opts.signing_dir and not (key.is_file() and secret.is_file()):
+        raise SystemExit('The selected signing directory must contain the existing key and password file.')
     if not key.exists():
         password=secrets.token_urlsafe(32)
         env['GUARD_KEY_PASS']=password

@@ -97,15 +97,16 @@ public final class GuardPhone {
         if(body.getInt("v")!=2 || body.getJSONArray("rules").length()>128)throw new Invalid("规则版本或数量不匹配");
         return body;
     }
-    private static void publish(String state,JSONArray rows) throws Exception {
+    private static void publish(String state,JSONArray rows,String assistId,String assistResult) throws Exception {
         JSONObject body=new JSONObject().put("v",1).put("time",System.currentTimeMillis()/1000)
                 .put("state",state).put("status",rows);
+        if(!assistId.isEmpty())body.put("assistId",assistId).put("assistResult",assistResult);
         String payload=Base64.encodeToString(body.toString().getBytes(StandardCharsets.UTF_8),B64);
         // /system/bin/content is a separate process; limit each Binder and argv payload.
         if(payload.length()>72000 && rows.length()>1){
             JSONArray left=new JSONArray(),right=new JSONArray();
             for(int i=0;i<rows.length();i++)(i<rows.length()/2?left:right).put(rows.getJSONObject(i));
-            publish(state,left);publish(state,right);return;
+            publish(state,left,assistId,assistResult);publish(state,right,assistId,assistResult);return;
         }
         String ack=cmd("content","call","--user","0","--uri",PROVIDER,"--method","phoneStatus","--arg",payload);
         if(!ack.startsWith("Result: Bundle[") || !ack.contains("ok=true"))throw new Invalid("手机未确认状态");
@@ -170,6 +171,7 @@ public final class GuardPhone {
     }
     private void loop(String original) throws Exception{
         int failures=0;
+        AssistSettings assist=new AssistSettings(DIR);
         while(true){
             if(!original.equals(path(APP))){apply(new JSONArray(),false);return;}
             try{
@@ -181,7 +183,13 @@ public final class GuardPhone {
                 boolean pending=journal.length()!=0 && !"run".equals(mode);
                 String state="run".equals(mode)?"运行中":("pause".equals(mode)?"已暂停":"已结束");
                 if(pending)state="部分设置待恢复 · 请查看各应用回报";
-                publish(state,rows);failures=0;
+                String assistId=policy.optString("assistId","");
+                String assistResult="";
+                if("run".equals(mode) && assistId.matches("[a-f0-9-]{36}")){
+                    try { assistResult=assist.apply(policy.getString("assistAction")); }
+                    catch (Exception ex) { assistResult="未完成 · "+concise(ex); }
+                }else assistId="";
+                publish(state,rows,assistId,assistResult);failures=0;
                 if("exit".equals(mode))return;
                 SystemClock.sleep(list.length()==0?5500:2200);
             }catch(Exception ex){

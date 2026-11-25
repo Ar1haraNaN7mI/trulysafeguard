@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 
 /** A single fixed, read-only system-service query launched with the ordinary app UID. */
 final class ScreenSessionReport {
-    private static final String PKG="[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+";
+    private static final String PKG="(?:android|[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+)";
     private static final String TYPE="TYPE_(?:SCREEN_CAPTURE|MIRRORING|PRESENTATION)";
     private static final Pattern LEGACY=Pattern.compile("\\(("+PKG+"), uid=([0-9]{1,9})\\): "+TYPE);
     private static final Pattern NAME=Pattern.compile("packageName: ("+PKG+")");

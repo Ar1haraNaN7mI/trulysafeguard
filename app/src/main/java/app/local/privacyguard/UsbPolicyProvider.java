@@ -141,6 +141,8 @@ public final class UsbPolicyProvider extends ContentProvider {
         JSONObject body=new JSONObject().put("v",phone?2:1).put("mode",mode).put("rules",rules);
         if(phone)body.put("phoneTime",phoneTime(p)).put("phoneState",p.getString(PHONE_STATE,""))
                 .put("lastUnplugged",p.getLong("lastUnplugged",0));
+        if(phone && p.contains("assistId"))body.put("assistId",p.getString("assistId",""))
+                .put("assistAction",p.getString("assistAction",""));
         String json=body.toString();
         return Base64.encodeToString(json.getBytes(StandardCharsets.UTF_8), BASE64);
     }
@@ -174,6 +176,11 @@ public final class UsbPolicyProvider extends ContentProvider {
         boolean changed = false;
         if(phone){
             String state=statusText(body,"state");
+            String ack=body.optString("assistId","");
+            if(!ack.isEmpty() && ack.equals(p.getString("assistId",""))){
+                editor.remove("assistId").remove("assistAction").putString("assistResult",statusText(body,"assistResult"));
+                changed=true;
+            }
             livePhoneTime=now;
             Intent usb=c.registerReceiver(null,new android.content.IntentFilter("android.hardware.usb.action.USB_STATE"));
             if (usb!=null && usb.hasExtra("connected") && !usb.getBooleanExtra("connected",true)

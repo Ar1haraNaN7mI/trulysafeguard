@@ -24,12 +24,14 @@ import android.system.StructPollfd;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.UnknownHostException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -43,10 +45,17 @@ public final class AdDnsService extends VpnService {
     private static volatile boolean running;
     private static volatile boolean startPending;
     private static volatile long latestCommand;
+    private static volatile AtomicLong displayedCount = new AtomicLong();
     private final Handler main = new Handler(Looper.getMainLooper());
     private Session session;
 
     public static boolean isRunning() { return running; }
+    public static long blockedCount() { return displayedCount.get(); }
+
+    @Override protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        writer.println("running=" + running);
+        writer.println("blocked_queries=" + blockedCount());
+    }
 
     public static String lastError(Context context) {
         return Prefs.prefs(context).getString(ERROR_KEY, "");
@@ -132,6 +141,7 @@ public final class AdDnsService extends VpnService {
             if (tunnel == null) throw new IOException("VPN consent unavailable");
             session = new Session(tunnel);
             tunnel = null;
+            displayedCount = session.blockedQueries;
             running = true;
             session.start();
         } catch (IOException | ErrnoException | PackageManager.NameNotFoundException | RuntimeException error) {
@@ -188,6 +198,7 @@ public final class AdDnsService extends VpnService {
         private final ParcelFileDescriptor tun;
         private final FileDescriptor[] wake;
         private final Object ioLock = new Object();
+        private final AtomicLong blockedQueries = new AtomicLong();
         private final ThreadPoolExecutor workers = new ThreadPoolExecutor(4, 6, 20, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(48));
         private final TcpDnsPeer tcp = new TcpDnsPeer(this::writePacket, this::resolve);
@@ -269,6 +280,7 @@ public final class AdDnsService extends VpnService {
         private void resolve(DnsPacket query, Consumer<byte[]> callback) {
             if (stopping) return;
             if (GuardRules.blocked(AdDnsService.this, query.host)) {
+                blockedQueries.incrementAndGet();
                 callback.accept(query.status(3)); // NXDOMAIN
                 return;
             }
@@ -281,7 +293,13 @@ public final class AdDnsService extends VpnService {
                         NetworkCapabilities caps = cm.getNetworkCapabilities(network);
                         if (network == null || caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN))
                             answer = query.status(2);
-                        else if (Build.VERSION.SDK_INT >= 29) answer = ModernDns.lookup(network, query);
+                        else if (Build.VERSION.SDK_INT >= 29) {
+                            answer = ModernDns.lookup(network, query);
+                            if (!stopping && DnsAliasPolicy.blocked(query, answer, host -> GuardRules.blocked(AdDnsService.this, host))) {
+                                blockedQueries.incrementAndGet();
+                                answer = query.status(3);
+                            }
+                        }
                         else if (query.type == 1 || query.type == 28) answer = query.addresses(network.getAllByName(query.host));
                         else answer = query.status(4); // Android 8/9 provides only address queries here.
                     } catch (InterruptedException interrupted) {
